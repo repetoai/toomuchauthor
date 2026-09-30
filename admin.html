@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>응원 관리 — 쓰다보니 작가가 너무 많아</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--orange:#F4511E;--cream:#FBF3E6;--ink:#1B1B1B;--soft:#4a4642}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans KR",-apple-system,sans-serif;background:var(--cream);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{width:min(760px,100% - 32px);margin:0 auto;padding:40px 0 80px}
+h1{font-size:26px;font-weight:900;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--soft);font-size:14px;margin:0 0 24px}
+.card{background:#fff;border:2px solid var(--ink);border-radius:16px;padding:20px;box-shadow:5px 5px 0 var(--ink);margin-bottom:20px}
+input{font:inherit;font-size:16px;padding:12px 14px;border:2px solid var(--ink);border-radius:12px;background:var(--cream);width:100%}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row input{flex:1;min-width:180px}
+button{font:inherit;font-weight:700;font-size:14px;padding:11px 16px;border-radius:999px;border:0;cursor:pointer;background:var(--ink);color:#fff;white-space:nowrap}
+button.ghost{background:#fff;color:var(--ink);border:2px solid var(--ink)}
+button.warn{background:var(--orange)}
+button:disabled{opacity:.5;cursor:default}
+.stats{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.stats b{font-size:34px;font-weight:900;color:var(--orange)}
+.tabs{display:flex;gap:6px;margin:0 0 12px}
+.tabs button{background:#fff;color:var(--ink);border:2px solid var(--ink)}
+.tabs button[aria-pressed=true]{background:var(--ink);color:#fff}
+.list{display:grid;gap:10px}
+.item{display:grid;grid-template-columns:1fr auto;gap:8px 14px;align-items:center;background:#fff;border:2px solid var(--ink);border-radius:14px;padding:12px 14px}
+.item.hidden{opacity:.5;border-style:dashed}
+.item .t{font-size:16px;word-break:break-word}
+.item small{display:block;color:var(--soft);font-weight:700;font-size:12px;margin-top:2px}
+.empty{color:var(--soft);padding:18px;border:2px dashed rgba(27,27,27,.25);border-radius:14px;text-align:center}
+.msg{font-size:14px;color:var(--soft);margin:8px 0 0}
+.hidden-badge{display:inline-block;font-size:11px;font-weight:900;padding:2px 8px;border-radius:999px;background:var(--ink);color:#fff;margin-left:6px;vertical-align:1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>응원 관리</h1>
+  <p class="sub">쓰다보니 작가가 너무 많아 · 관리자 전용</p>
+
+  <div class="card" id="loginCard">
+    <div class="row">
+      <input type="password" id="key" placeholder="관리자 비밀번호" autocomplete="current-password">
+      <button id="loginBtn">들어가기</button>
+    </div>
+    <p class="msg" id="loginMsg"></p>
+  </div>
+
+  <div id="panel" hidden>
+    <div class="card">
+      <div class="stats">
+        <div><b id="claps">0</b> 박수</div>
+        <div><b id="count">0</b> 응원</div>
+        <div style="margin-left:auto" class="row">
+          <button class="ghost" id="refreshBtn">새로고침</button>
+          <button class="warn" id="resetBtn">박수 0으로</button>
+          <button class="ghost" id="logoutBtn">나가기</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button id="tabAll" aria-pressed="true">전체</button>
+      <button id="tabShown" aria-pressed="false">공개 중</button>
+      <button id="tabHidden" aria-pressed="false">숨김</button>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+</div>
+
+<script>
+const API_URL = ''; // ← index.html 과 같은 Apps Script 웹 앱 URL
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let key = sessionStorage.getItem('adminKey') || '';
+let data = { claps:0, msgs:[] };
+let filter = 'all';
+
+async function api(params){
+  if(!API_URL){ throw new Error('API_URL이 비어 있어요. admin.html 안의 API_URL에 웹 앱 URL을 넣어 주세요.'); }
+  const u = new URL(API_URL); Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v)); u.searchParams.set('_',Date.now());
+  const r = await fetch(u.toString(),{cache:'no-store'}); if(!r.ok) throw new Error('응답 오류'); return r.json();
+}
+function render(){
+  $('#claps').textContent = data.claps;
+  $('#count').textContent = data.msgs.filter(m=>!m.hidden).length;
+  const list = data.msgs.filter(m => filter==='all' || (filter==='shown' && !m.hidden) || (filter==='hidden' && m.hidden));
+  const el = $('#list');
+  if(!list.length){ el.innerHTML = '<div class="empty">해당하는 응원이 없어요.</div>'; return; }
+  el.innerHTML = list.map(m => `
+    <div class="item ${m.hidden?'hidden':''}">
+      <div><div class="t">${esc(m.t)}${m.hidden?'<span class="hidden-badge">숨김</span>':''}</div><small>${esc(m.n||'익명')} · ${esc(m.d)}</small></div>
+      <button class="${m.hidden?'':'warn'}" data-row="${m.row}" data-act="${m.hidden?'unhide':'hide'}">${m.hidden?'다시 보이기':'숨기기'}</button>
+    </div>`).join('');
+  el.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try { data = await api({action:b.dataset.act, row:b.dataset.row, key}); render(); }
+    catch(e){ alert('처리하지 못했어요: '+e.message); b.disabled=false; }
+  }));
+}
+async function load(){
+  try { const d = await api({action:'admin_list', key}); if(d.error) throw new Error('비밀번호가 맞지 않아요'); data = d; render(); return true; }
+  catch(e){ return e.message; }
+}
+async function login(){
+  key = $('#key').value.trim(); $('#loginMsg').textContent = '확인 중…';
+  const ok = await load();
+  if(ok===true){ sessionStorage.setItem('adminKey', key); $('#loginCard').hidden = true; $('#panel').hidden = false; }
+  else $('#loginMsg').textContent = ok;
+}
+$('#loginBtn').addEventListener('click', login);
+$('#key').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+$('#refreshBtn').addEventListener('click', load);
+$('#logoutBtn').addEventListener('click', () => { sessionStorage.removeItem('adminKey'); location.reload(); });
+$('#resetBtn').addEventListener('click', async () => {
+  if(!confirm('박수 수를 0으로 되돌릴까요?')) return;
+  try { data = await api({action:'reset_claps', key}); render(); } catch(e){ alert('처리하지 못했어요'); }
+});
+[['tabAll','all'],['tabShown','shown'],['tabHidden','hidden']].forEach(([id,f]) => $('#'+id).addEventListener('click', () => {
+  filter = f; document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-pressed', b.id===id)); render();
+}));
+if(key){ load().then(ok => { if(ok===true){ $('#loginCard').hidden = true; $('#panel').hidden = false; } }); }
+</script>
+</body>
+</html>
