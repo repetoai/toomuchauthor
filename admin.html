@@ -27,6 +27,7 @@ button:disabled{opacity:.5;cursor:default}
 .tabs button{background:#fff;color:var(--ink);border:2px solid var(--ink)}
 .tabs button[aria-pressed=true]{background:var(--ink);color:#fff}
 .list{display:grid;gap:10px}
+.item .row{gap:6px;flex-wrap:nowrap}
 .item{display:grid;grid-template-columns:1fr auto;gap:8px 14px;align-items:center;background:#fff;border:2px solid var(--ink);border-radius:14px;padding:12px 14px}
 .item.hidden{opacity:.5;border-style:dashed}
 .item .t{font-size:16px;word-break:break-word}
@@ -56,6 +57,7 @@ button:disabled{opacity:.5;cursor:default}
         <div><b id="count">0</b> 응원</div>
         <div style="margin-left:auto" class="row">
           <button class="ghost" id="refreshBtn">새로고침</button>
+          <button class="ghost" id="csvBtn">엑셀로 내려받기</button>
           <button class="warn" id="resetBtn">박수 0으로</button>
           <button class="ghost" id="logoutBtn">나가기</button>
         </div>
@@ -72,7 +74,7 @@ button:disabled{opacity:.5;cursor:default}
 </div>
 
 <script>
-const API_URL = ''; // ← index.html 과 같은 Apps Script 웹 앱 URL
+const API_URL = '/api/cheers'; // index.html 과 같은 주소
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let key = sessionStorage.getItem('adminKey') || '';
@@ -80,8 +82,8 @@ let data = { claps:0, msgs:[] };
 let filter = 'all';
 
 async function api(params){
-  if(!API_URL){ throw new Error('API_URL이 비어 있어요. admin.html 안의 API_URL에 웹 앱 URL을 넣어 주세요.'); }
-  const u = new URL(API_URL); Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v)); u.searchParams.set('_',Date.now());
+  if(!API_URL){ throw new Error('API_URL이 비어 있어요.'); }
+  const u = new URL(API_URL, location.href); Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v)); u.searchParams.set('_',Date.now());
   const r = await fetch(u.toString(),{cache:'no-store'}); if(!r.ok) throw new Error('응답 오류'); return r.json();
 }
 function render(){
@@ -93,16 +95,18 @@ function render(){
   el.innerHTML = list.map(m => `
     <div class="item ${m.hidden?'hidden':''}">
       <div><div class="t">${esc(m.t)}${m.hidden?'<span class="hidden-badge">숨김</span>':''}</div><small>${esc(m.n||'익명')} · ${esc(m.d)}</small></div>
-      <button class="${m.hidden?'':'warn'}" data-row="${m.row}" data-act="${m.hidden?'unhide':'hide'}">${m.hidden?'다시 보이기':'숨기기'}</button>
+      <div class="row"><button class="${m.hidden?'':'warn'}" data-row="${m.row}" data-act="${m.hidden?'unhide':'hide'}">${m.hidden?'다시 보이기':'숨기기'}</button>
+      <button class="ghost" data-row="${m.row}" data-act="delete">삭제</button></div>
     </div>`).join('');
   el.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+    if(b.dataset.act==='delete' && !confirm('이 응원을 완전히 지울까요? 되돌릴 수 없어요.\n(잠시 가리기만 하려면 \'숨기기\'를 쓰세요)')) return;
     b.disabled = true;
     try { data = await api({action:b.dataset.act, row:b.dataset.row, key}); render(); }
     catch(e){ alert('처리하지 못했어요: '+e.message); b.disabled=false; }
   }));
 }
 async function load(){
-  try { const d = await api({action:'admin_list', key}); if(d.error) throw new Error('비밀번호가 맞지 않아요'); data = d; render(); return true; }
+  try { const d = await api({action:'admin_list', key}); if(d.error) throw new Error(d.error); data = d; render(); return true; }
   catch(e){ return e.message; }
 }
 async function login(){
@@ -114,6 +118,17 @@ async function login(){
 $('#loginBtn').addEventListener('click', login);
 $('#key').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
 $('#refreshBtn').addEventListener('click', load);
+$('#csvBtn').addEventListener('click', () => {
+  const cell = v => '"' + String(v ?? '').replace(/"/g,'""').replace(/\r?\n/g,' ') + '"';
+  const head = ['날짜','이름','응원','상태','남긴 시각'];
+  const lines = [head.map(cell).join(',')].concat(data.msgs.map(m => [m.d, m.n||'익명', m.t, m.hidden?'숨김':'공개', (m.at||'').replace('T',' ').slice(0,16)].map(cell).join(',')));
+  lines.push(''); lines.push([cell('박수'), cell(data.claps)].join(','));
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); const d = new Date();
+  a.href = URL.createObjectURL(blob);
+  a.download = `응원메시지_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+});
 $('#logoutBtn').addEventListener('click', () => { sessionStorage.removeItem('adminKey'); location.reload(); });
 $('#resetBtn').addEventListener('click', async () => {
   if(!confirm('박수 수를 0으로 되돌릴까요?')) return;

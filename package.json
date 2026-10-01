@@ -1,0 +1,7 @@
+{
+  "name": "toomuchauthor",
+  "private": true,
+  "type": "module",
+  "description": "쓰다보니 작가가 너무 많아 — 응원 메시지·박수 (Vercel + Upstash, 북내면과 저장소 공유)",
+  "dependencies": { "@upstash/redis": "^1.34.0" }
+}

@@ -461,8 +461,8 @@ $('#dlBtn').addEventListener('click',()=>{
   },'image/png');
 });
 
-/* guestbook — 구글 시트 연동. API_URL이 비어 있으면 이 브라우저에만 저장됩니다. */
-const API_URL = ''; // ← Apps Script 웹 앱 URL을 여기에 붙여넣으세요 (예: 'https://script.google.com/macros/s/XXXX/exec')
+/* guestbook — Vercel 서버 기능(api/cheers.js) + Upstash 저장소. 비워 두면 이 브라우저에만 저장됩니다. */
+const API_URL = '/api/cheers';
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const esc2=esc;
 function renderGuest(list){
@@ -471,7 +471,7 @@ function renderGuest(list){
   el.innerHTML=list.map(g=>`<div class="gitem"><div>${esc2(g.t)}<small>${esc2(g.n||'익명')} · ${esc2(g.d)}</small></div></div>`).join('');
 }
 async function api(params){
-  const u=new URL(API_URL); Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v)); u.searchParams.set('_',Date.now());
+  const u=new URL(API_URL, location.href); Object.entries(params).forEach(([k,v])=>u.searchParams.set(k,v)); u.searchParams.set('_',Date.now());
   const r=await fetch(u.toString(),{cache:'no-store'}); if(!r.ok) throw new Error('bad'); return r.json();
 }
 let clapN=0, pendingClaps=0, clapTimer=null;
